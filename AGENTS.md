@@ -1,0 +1,35 @@
+# Claude-IPCheck Toolkit
+
+Detect whether the current Windows network environment can use Claude AI stably and with low risk-control friction.
+
+## When to use
+Use this toolkit when the user asks whether their network/IP can use Claude, wants an "IP check", "ipcheck", "Claude risk-control check", or wants to deploy a Claude network-environment detector on Windows.
+
+## What it does
+Two layered checks that corroborate each other:
+1. **Structured cross-validation** via the free ip-api.com JSON API: country/region, ISP, ASN, organization, and a heuristic判断 of whether the exit IP is a datacenter/cloud IP (a high risk factor for Claude).
+2. **Claude-specific check** via `stormzhang/ipcheck` (the `ai-ipcheck` pip package): IP geolocation, DNS leak, proxy state, timezone consistency, Claude endpoint reachability, datacenter risk → final **Low / Medium / High** risk verdict + score.
+
+## How to deploy (Windows only)
+1. Locate this toolkit's files: `ClaudeIpCheck.ps1` and the two `.bat` launchers (`Start-ClaudeIpCheck.bat`, `Start-ClaudeIpCheck-Monitor.bat`).
+2. Ensure Python 3.10+ is on PATH (`python --version`). If missing, ask the user to install it from https://www.python.org/downloads/ and tick **"Add to PATH"**. Do not silently install Python.
+3. Run a check (pick one):
+   - One-shot: `powershell -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
+   - Monitor (auto-detect after VPN IP stabilizes): append `-Monitor`
+   - Optionally append `-OpenIpInfoCv` to open ipinfo.cv in a browser for manual cross-check.
+4. Interpret results:
+   - **Low (green)**: clean environment, safe to use Claude.
+   - **Medium (yellow)**: usable but improve — enable global TUN, disable WebRTC local-IP leak, use clean DNS (e.g. 1.1.1.1), avoid shared IPs.
+   - **High (red)**: not recommended for Claude (risk of control/ban) — switch to a residential/home IP or a compliant proxy.
+
+## Constraints
+- Does **NOT** change the default browser, write the registry, or require admin rights (only `-TimeSync` clock sync may need admin).
+- `ipinfo.cv/claude-ai-check` is a client-side JS page; its verdict cannot be parsed by scripts. Use it only as a manual `-OpenIpInfoCv` cross-check, never as an automated gate.
+- First run auto-installs `ai-ipcheck` via pip (needs network). On failure, suggest manual install or a mirror:
+  `python -m pip install -U ai-ipcheck -i https://pypi.tuna.tsinghua.edu.cn/simple`
+- Windows + PowerShell 5.1+ only. On non-Windows, tell the user the toolkit does not apply.
+
+## Troubleshooting
+- Python not found → guide install + PATH (or restart terminal to apply PATH).
+- pip slow/fails → use the Tsinghua mirror above.
+- Garbled Chinese → UTF-8 is forced in the scripts; ensure the terminal is UTF-8 (the `.bat` runs `chcp 65001`).

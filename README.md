@@ -114,12 +114,39 @@ Claude-IPCheck-Toolkit/
 ├── ClaudeIpCheck.ps1              # 主脚本
 ├── Start-ClaudeIpCheck.bat        # 双击：单次检测
 ├── Start-ClaudeIpCheck-Monitor.bat# 双击：持续监测
+├── SKILL.md                       # Agent Skills 标准（WorkBuddy / Qoder / Trae / Claude Code 共用）
+├── AGENTS.md                      # 通用指令文件（Codex 及所有读 AGENTS.md 的工具）
+├── codex.md                       # Codex 专用指令（内容同 AGENTS.md）
 ├── screenshots/
 │   └── ipcheck-output-example.png # 输出示例截图
 ├── README.md
 ├── LICENSE
 └── .gitignore
 ```
+
+---
+
+## 七、跨工具安装（同一份文件夹，复制到各自 skills 目录即可）
+
+本 skill 遵循 **Agent Skills 开放标准**（`SKILL.md` + `name`/`description` frontmatter），
+WorkBuddy、Qoder、Trae、Claude Code 共用同一套格式，只需把解压后的
+`claude-ipcheck-toolkit/` 文件夹复制到对应工具的 skills 目录即可使用。
+
+| 工具 | 用户级 skills 目录 | 项目级 |
+| --- | --- | --- |
+| **WorkBuddy** | `~/.workbuddy/skills/claude-ipcheck-toolkit/` | — |
+| **Qoder** | `~/.qoder/skills/claude-ipcheck-toolkit/`（国内版 `~/.qoder-cn/skills/`） | `.qoder/skills/claude-ipcheck-toolkit/` |
+| **Trae** | `~/.trae/skills/claude-ipcheck-toolkit/`（Win: `%userprofile%\.trae\skills\`） | `.trae/skills/claude-ipcheck-toolkit/` |
+| **Claude Code** | `~/.claude/skills/claude-ipcheck-toolkit/` | — |
+| **Codex** | 读取 `AGENTS.md` / `codex.md`（本包已含，放项目根或用户级） | 项目根 `AGENTS.md` |
+
+**安装步骤（以 WorkBuddy 为例，其余同理）：**
+1. 解压 `Claude-IPCheck-Toolkit.zip`，得到内层 `claude-ipcheck-toolkit/` 文件夹。
+2. 复制到目标工具的 skills 目录（文件夹名须与 `name:` 一致，即 `claude-ipcheck-toolkit`）。
+3. 触发方式：直接说"检测我的网络能不能用 Claude"，或 `/claude-ipcheck-toolkit`。
+
+> 注：Qoder 国内版路径为 `~/.qoder-cn/skills/`；Trae 旧版全局路径为 `~/.traecli/skills/`，以实际客户端为准。
+> Codex 通过本包随附的 `AGENTS.md` / `codex.md` 自动读取本工具说明。
 
 ---
 
