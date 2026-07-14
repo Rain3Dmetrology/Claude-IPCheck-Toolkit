@@ -2,8 +2,9 @@
 
 > 一键检测「当前 Windows 网络环境是否适合稳定、低风控地使用 Claude AI」。
 
-本工具面向普通 Windows 用户，无需改注册表、不修改默认浏览器、不需要管理员权限。
-它把两套检测合在一起，互相印证：
+本工具面向普通 Windows 用户，无需改注册表、不修改默认浏览器。
+双击 `Start-ClaudeIpCheck.bat` 会**自动请求管理员权限（UAC 提权）**，以便修复向导里的 IPv6 / 清洁 DNS / 按 IP 设时区等项能正常生效；
+仅做检测不强制管理员，但提权后一切功能都可完整使用。它把两套检测合在一起，互相印证：
 
 | 检测层 | 工具 | 看什么 |
 | --- | --- | --- |
@@ -18,9 +19,12 @@
 
 ## 一、准备工作（只需一次）
 
-1. 安装 **Python 3.10 或以上**，安装时务必勾选 **`Add python.exe to PATH`**。
+1. 安装 **PowerShell 7（pwsh）**，脚本运行依赖它（Windows 自带的 PowerShell 5.1 不兼容）。
+   推荐：`winget install Microsoft.PowerShell`，或从
+   <https://github.com/PowerShell/PowerShell/releases> 下载 MSI 安装。
+2. 安装 **Python 3.10 或以上**，安装时务必勾选 **`Add python.exe to PATH`**。
    下载：<https://www.python.org/downloads/>
-2. 把本仓库整个文件夹下载 / 克隆到任意位置（例如桌面 `Claude-IPCheck-Toolkit`）。
+3. 把本仓库整个文件夹下载 / 克隆到任意位置（例如桌面 `Claude-IPCheck-Toolkit`）。
 
 > 首次运行会自动执行 `python -m pip install ai-ipcheck`，需联网。
 
