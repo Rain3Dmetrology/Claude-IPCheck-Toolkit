@@ -13,9 +13,9 @@ The user asks whether their network/IP can use Claude, wants an "IP check" / "ip
 3. **Optional remediation wizard** (`-Remediate`): after the check, lists fixable items (disable IPv6, clean DNS, flush DNS, set system proxy, sync timezone). Each shows its command and runs only after a manual Y/N confirmation. Admin-only items (IPv6, DNS) must run as administrator.
 
 ## How to deploy (Windows only)
-1. Locate `ClaudeIpCheck.ps1` and the two `.bat` launchers.
+1. Locate `ClaudeIpCheck.ps1` and the single launcher `Start-ClaudeIpCheck.bat` (self-elevates; shows a mode menu: [1] Once / [2] Monitor / [3] Remediation).
 2. Ensure Python 3.10+ on PATH (`python --version`). If missing, ask the user to install from https://www.python.org/downloads/ with "Add to PATH" ticked. Do not silently install Python.
-3. Run:
+3. Run (preferred: double-click `Start-ClaudeIpCheck.bat` — self-elevates and shows a mode menu; Enter = Once, [2] = Monitor, [3] = Remediation):
    - One-shot: `pwsh -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
    - Monitor: append `-Monitor` (optionally `-OpenIpInfoCv` to open ipinfo.cv manually).
    - Check + remediation wizard: append `-Once -Remediate` (each fix confirmed before running).

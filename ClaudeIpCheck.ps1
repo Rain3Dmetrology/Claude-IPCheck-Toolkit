@@ -628,6 +628,22 @@ function Run-Once($ip) {
     }
 }
 
+# ===================== 启动模式选择（无显式模式参数时显示菜单） =====================
+if (-not $Monitor -and -not $Remediate) {
+    Write-Host ''
+    Write-Host '===== Claude IP 检查工具 =====' -ForegroundColor Magenta
+    Write-Host '请选择运行模式（直接回车 = 单次检测）：'
+    Write-Host '  [1] 单次检测（默认）'
+    Write-Host '  [2] 持续监控（出口 IP 稳定后自动检测，Ctrl+C 退出）'
+    Write-Host '  [3] 检测 + 网络修复向导'
+    $pick = Read-Host '请输入 1 / 2 / 3'
+    switch ($pick.Trim()) {
+        '2' { $Monitor = $true }
+        '3' { $Remediate = $true }
+        default { $Once = $true }
+    }
+}
+
 # ===================== 入口 =====================
 if ($Monitor) {
     Write-Step ('进入监测模式：每 ' + $PollIntervalSec + ' 秒检测出口 IP，稳定 ' + $StablePolls + ' 次后运行检测 (Ctrl+C 退出)')

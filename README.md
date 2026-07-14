@@ -28,21 +28,18 @@
 
 ## 二、傻瓜式使用
 
-### 方式 A：双击运行（推荐）
-直接双击 **`Start-ClaudeIpCheck.bat`**，等待结果即可。
+### 双击运行（推荐）
+直接双击 **`Start-ClaudeIpCheck.bat`**：脚本启动即**自动请求管理员权限（UAC 提权）**，
+点「是」后弹出**模式菜单**，直接回车 = 单次检测：
 
-### 方式 B：持续监测（适合挂 VPN 后自动检测）
-双击 **`Start-ClaudeIpCheck-Monitor.bat`**：脚本每 15 秒看一次出口 IP，
-等 IP 稳定后自动跑一次完整检测。`Ctrl+C` 退出。
-
-### 方式 C：检测 + 一键修复向导（推荐进阶）
-双击 **`Start-ClaudeIpCheck-Remediate.bat`**：先跑完整检测，再根据「使用建议」
-启动**修复向导**——逐项列出可自动修复项，每项先展示将要执行的命令、
-人工确认（Y/N）后再执行。可输入多个编号（如 `1,2,4`）或 `0` 退出。
+- `[1]` 单次检测（默认）：跑一次完整检测并给出风险结论与使用建议。
+- `[2]` 持续监控：每 15 秒看一次出口 IP，稳定后自动跑完整检测，`Ctrl+C` 退出（适合挂 VPN 后自动检测）。
+- `[3]` 检测 + 网络修复向导：先跑完整检测，再根据「使用建议」启动**修复向导**——
+  逐项列出可自动修复项，每项先展示将要执行的命令、人工确认（Y/N）后再执行。可输入多个编号（如 `1,2,4`）或 `0` 退出。
 
 > 修复项包括：禁用 IPv6、设置清洁 DNS（1.1.1.1 / 8.8.8.8）、刷新 DNS 缓存、
-> 设置系统代理 / 环境变量、同步系统时区。其中**禁用 IPv6、修改 DNS 需要管理员权限**，
-> 请以「管理员身份运行」该 .bat 以获得完整修复能力；TUN 全局代理、WebRTC 泄漏属
+> 设置系统代理 / 环境变量、按出口 IP 自动设置系统时区。其中**禁用 IPv6、修改 DNS、改时区需要管理员权限**，
+> 双击 .bat 已自动提权，无需再手动「以管理员身份运行」；TUN 全局代理、WebRTC 泄漏属
 > 浏览器 / 代理软件侧，脚本仅给出手动操作指引，无法直接修改。
 
 ---
@@ -123,9 +120,7 @@
 ```
 Claude-IPCheck-Toolkit/
 ├── ClaudeIpCheck.ps1              # 主脚本
-├── Start-ClaudeIpCheck.bat        # 双击：单次检测
-├── Start-ClaudeIpCheck-Monitor.bat# 双击：持续监测
-├── Start-ClaudeIpCheck-Remediate.bat # 双击：检测 + 修复向导
+├── Start-ClaudeIpCheck.bat        # 双击：自动提权 + 模式菜单（[1]单次/[2]监控/[3]检测+修复）
 ├── SKILL.md                       # Agent Skills 标准（WorkBuddy / Qoder / Trae / Claude Code 共用）
 ├── AGENTS.md                      # 通用指令文件（Codex 及所有读 AGENTS.md 的工具）
 ├── codex.md                       # Codex 专用指令（内容同 AGENTS.md）

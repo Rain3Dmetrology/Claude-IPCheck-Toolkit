@@ -12,9 +12,9 @@ Two layered checks that corroborate each other:
 3. **Optional remediation wizard** (`-Remediate`): after the check, lists fixable items (disable IPv6, set clean DNS, flush DNS cache, set system proxy, sync timezone). Each item shows the command first and runs only after a manual Y/N confirmation. Items needing admin (IPv6, DNS) must be run as administrator.
 
 ## How to deploy (Windows only)
-1. Locate this toolkit's files: `ClaudeIpCheck.ps1` and the `.bat` launchers (`Start-ClaudeIpCheck.bat`, `Start-ClaudeIpCheck-Monitor.bat`, `Start-ClaudeIpCheck-Remediate.bat`).
+1. Locate this toolkit's files: `ClaudeIpCheck.ps1` and the single launcher `Start-ClaudeIpCheck.bat` (which self-elevates to admin and shows a mode menu: [1] Once / [2] Monitor / [3] Remediation).
 2. Ensure Python 3.10+ is on PATH (`python --version`). If missing, ask the user to install it from https://www.python.org/downloads/ and tick **"Add to PATH"**. Do not silently install Python.
-3. Run a check (pick one):
+3. Run a check (preferred: double-click `Start-ClaudeIpCheck.bat` — it self-elevates and shows a mode menu; Enter = Once, [2] = Monitor, [3] = Remediation):
    - One-shot: `pwsh -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
    - Monitor (auto-detect after VPN IP stabilizes): append `-Monitor`
    - Check + remediation wizard: append `-Once -Remediate` (each fix confirmed before running)
