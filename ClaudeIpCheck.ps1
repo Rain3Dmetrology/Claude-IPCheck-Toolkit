@@ -19,10 +19,6 @@
         （该页面是纯前端 JS 渲染，无法被脚本解析，只能人工看，因此不作为自动约束）。
       - 持续监测出口 IP 变化（Monitor 模式）：IP 稳定进入目标区域后自动跑检测。
       - 可选时间同步（w32tm /resync，需管理员权限，失败不致命）。
-      - 网络性能检测（参考 MyIP 思路，需 -SpeedTest / -DnsCheck / -Reach / -NetPerf 开启）：
-        网速（下载/上传带宽 + 延迟/抖动，复用 Cloudflare 官方测速端点）、
-        DNS 解析器检测（出口 DNS 是否泄漏/被接管）、
-        服务可达性（Claude / ChatGPT / Google 等站点 RTT）。
 
     全程不修改默认浏览器、不写入任何注册表。无需管理员权限即可运行。
 
@@ -56,21 +52,6 @@
 .PARAMETER Once
     只跑一次检测即退出（默认行为，可省略）。
 
-.PARAMETER SpeedTest
-    运行网速测试（参考 MyIP 的 Speed Test）：通过 Cloudflare 官方测速端点测量
-    下载 / 上传带宽（Mbps）与延迟 / 抖动（ms），并显示就近接入的 Cloudflare 节点。默认关闭。
-
-.PARAMETER DnsCheck
-    运行 DNS 解析器检测：查询当前实际使用的出口 DNS（edns.ip-api.com，无需密钥），
-    判断是否与本地配置一致（DNS 泄漏 / 被接管迹象）。默认关闭。
-
-.PARAMETER Reach
-    运行服务可达性检测（参考 MyIP 的 Connectivity）：测量 Claude / ChatGPT / Google /
-    GitHub / YouTube / WeChat 等站点的可达性与 RTT。默认关闭。
-
-.PARAMETER NetPerf
-    一次性开启上述三项网络性能检测（SpeedTest + DnsCheck + Reach）。默认关闭。
-
 .EXAMPLE
     # 一键检测（双击 Start-ClaudeIpCheck.bat 即为此模式）
     .\ClaudeIpCheck.ps1 -Once
@@ -94,11 +75,7 @@ param(
     [switch]$OpenIpInfoCv,
     [switch]$SkipInstall,
     [switch]$TimeSync,
-    [switch]$Once,
-    [switch]$SpeedTest,
-    [switch]$DnsCheck,
-    [switch]$Reach,
-    [switch]$NetPerf
+    [switch]$Once
 )
 
 # ===================== 基础设置 =====================
@@ -244,164 +221,8 @@ function Open-Browser($url) {
     try { Start-Process $url } catch { Write-Warn ('无法打开浏览器: ' + $url) }
 }
 
-# ===================== 网络性能检测（参考 MyIP 的 Speed Test / Connectivity / DNS 思路） =====================
-# 测速端点复用 Cloudflare 官方测速服务（与 MyIP 同源）：
-#   - 下载：GET  https://speed.cloudflare.com/__down?bytes=N   （返回 N 字节原始数据）
-#   - 上传：POST https://speed.cloudflare.com/__up?bytes=N     （上传 N 字节原始数据）
-#   - 延迟：反复 GET https://speed.cloudflare.com/cdn-cgi/trace 计时 RTT
-#   - 接入点：trace 中的 colo（最近 Cloudflare 节点）/ loc（国家）
-# 全程使用 .NET HttpClient 计时，避免 Invoke-WebRequest 管道开销影响精度。
-
-function Get-CloudflareTrace {
-    try {
-        Add-Type -AssemblyName System.Net.Http -ErrorAction SilentlyContinue
-        $http = New-Object System.Net.Http.HttpClient
-        $http.Timeout = [TimeSpan]::FromSeconds(15)
-        $r = $http.GetAsync('https://speed.cloudflare.com/cdn-cgi/trace').GetAwaiter().GetResult()
-        $txt = $r.Content.ReadAsStringAsync().GetAwaiter().GetResult()
-        $map = @{}
-        foreach ($line in ($txt -split "`n")) {
-            if ($line -match '^([^=]+)=(.*)$') { $map[$Matches[1]] = $Matches[2].Trim() }
-        }
-        return $map
-    }
-    catch { return $null }
-}
-
-function Test-NetSpeed {
-    param(
-        [int]$DownloadBytes = 25MB,
-        [int]$UploadBytes   = 8MB,
-        [int]$LatencySamples = 10
-    )
-    $result = @{ ok = $false; downloadMbps = $null; uploadMbps = $null; latencyMs = $null; jitterMs = $null; colo = ''; loc = ''; ip = ''; error = '' }
-    try {
-        Add-Type -AssemblyName System.Net.Http -ErrorAction SilentlyContinue
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-        $http = New-Object System.Net.Http.HttpClient
-        $http.Timeout = [TimeSpan]::FromSeconds(40)
-        $http.DefaultRequestHeaders.Add('User-Agent', 'Claude-IPCheck-Toolkit')
-
-        # 接入点信息
-        $trace = Get-CloudflareTrace
-        if ($trace) {
-            $result.colo = if ($trace['colo']) { $trace['colo'] } else { '' }
-            $result.loc  = if ($trace['loc'])  { $trace['loc'] }  else { '' }
-            $result.ip   = if ($trace['ip'])   { $trace['ip'] }   else { '' }
-        }
-
-        # 延迟 / 抖动（多次小请求 RTT）
-        $rtts = @()
-        for ($i = 0; $i -lt $LatencySamples; $i++) {
-            $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            try {
-                $resp = $http.GetAsync('https://speed.cloudflare.com/cdn-cgi/trace').GetAwaiter().GetResult()
-                $resp.Content.ReadAsStringAsync().GetAwaiter().GetResult() | Out-Null
-                $sw.Stop()
-                $rtts += $sw.Elapsed.TotalMilliseconds
-            }
-            catch { }
-        }
-        if ($rtts.Count -ge 3) {
-            $avg = ($rtts | Measure-Object -Average).Average
-            $variance = ($rtts | ForEach-Object { [math]::Pow($_ - $avg, 2) } | Measure-Object -Average).Average
-            $result.latencyMs = [math]::Round($avg, 1)
-            $result.jitterMs  = [math]::Round([math]::Sqrt($variance), 1)
-        }
-
-        # 下载
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $resp = $http.GetAsync(('https://speed.cloudflare.com/__down?bytes={0}' -f $DownloadBytes)).GetAwaiter().GetResult()
-        $stream = $resp.Content.ReadAsStreamAsync().GetAwaiter().GetResult()
-        $buf = New-Object byte[] 65536
-        $total = 0
-        while (($n = $stream.Read($buf, 0, $buf.Length)) -gt 0) { $total += $n }
-        $sw.Stop()
-        if ($sw.Elapsed.TotalSeconds -gt 0.2) {
-            $result.downloadMbps = [math]::Round(($total * 8) / ($sw.Elapsed.TotalSeconds * 1e6), 2)
-        }
-
-        # 上传
-        $data = New-Object byte[] $UploadBytes
-        [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($data)
-        $content = New-Object System.Net.Http.ByteArrayContent -ArgumentList @(,$data)
-        $content.Headers.ContentType = [System.Net.Http.Headers.MediaTypeHeaderValue]::Parse('application/octet-stream')
-        $content.Headers.ContentLength = $UploadBytes
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $resp = $http.PostAsync(('https://speed.cloudflare.com/__up?bytes={0}' -f $UploadBytes), $content).GetAwaiter().GetResult()
-        $sw.Stop()
-        if ($sw.Elapsed.TotalSeconds -gt 0.2) {
-            $result.uploadMbps = [math]::Round(($UploadBytes * 8) / ($sw.Elapsed.TotalSeconds * 1e6), 2)
-        }
-
-        $result.ok = ($null -ne $result.downloadMbps -or $null -ne $result.uploadMbps)
-        return $result
-    }
-    catch {
-        $result.error = $_.Exception.Message
-        return $result
-    }
-}
-
-function Test-DnsResolver {
-    try {
-        [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-        $raw = Invoke-RestMethod -Uri 'https://edns.ip-api.com/json' -TimeoutSec 12 -ErrorAction Stop
-        $resolverIp    = if ($raw.dns -and $raw.dns.ip)    { $raw.dns.ip }    else { '' }
-        $resolverQuery = if ($raw.dns -and $raw.dns.query) { $raw.dns.query } else { '' }
-        $local = @()
-        try {
-            $adapters = Get-DnsClientServerAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue
-            foreach ($a in $adapters) {
-                foreach ($s in $a.ServerAddresses) { if ($s -and $local -notcontains $s) { $local += $s } }
-            }
-        }
-        catch { }
-        return @{ ok = $true; resolverIp = $resolverIp; resolverQuery = $resolverQuery; localDns = $local; match = ($local -contains $resolverIp) }
-    }
-    catch {
-        return @{ ok = $false; resolverIp = ''; resolverQuery = ''; localDns = @(); match = $null; error = $_.Exception.Message }
-    }
-}
-
-function Test-ServiceReachability {
-    param(
-        [array]$Targets = @(
-            @{ name = 'Claude';   url = 'https://claude.com/favicon.ico' },
-            @{ name = 'ChatGPT';  url = 'https://chatgpt.com/favicon.ico' },
-            @{ name = 'Google';   url = 'https://www.google.com/favicon.ico' },
-            @{ name = 'GitHub';   url = 'https://github.com/favicon.ico' },
-            @{ name = 'YouTube';  url = 'https://www.youtube.com/favicon.ico' },
-            @{ name = 'WeChat';   url = 'https://res.wx.qq.com/a/wx_fed/assets/res/NTI4MWU5.ico' }
-        )
-    )
-    Add-Type -AssemblyName System.Net.Http -ErrorAction SilentlyContinue
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-    $http = New-Object System.Net.Http.HttpClient
-    $http.Timeout = [TimeSpan]::FromSeconds(10)
-    $http.DefaultRequestHeaders.Add('User-Agent', 'Claude-IPCheck-Toolkit')
-    $results = @()
-    foreach ($t in $Targets) {
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $ok = $false; $code = ''
-        try {
-            $resp = $http.GetAsync($t.url).GetAwaiter().GetResult()
-            $code = [int]$resp.StatusCode
-            $ok = $true
-        }
-        catch { $ok = $false }
-        $sw.Stop()
-        $ms = [math]::Round($sw.Elapsed.TotalMilliseconds, 0)
-        $results += @{ name = $t.name; reachable = $ok; code = $code; ms = $ms }
-    }
-    return $results
-}
-
 # ===================== 主检测流程 =====================
 function Run-Once($ip) {
-    # NetPerf 一次性开启全部网络性能检测
-    if ($NetPerf) { $SpeedTest = $true; $DnsCheck = $true; $Reach = $true }
-
     Write-Host ('`n========== Claude-IPCheck 检测 ==========') -ForegroundColor Magenta
     Write-Info ('目标区域建议: ' + $Region)
 
@@ -438,44 +259,6 @@ function Run-Once($ip) {
     }
     else {
         Write-Warn '无法获取出口 IP 信息（可能无网络或被墙），仍尝试运行 ipcheck'
-    }
-
-    # ---- 1.5) 网络性能检测（可选，参考 MyIP 思路） ----
-    if ($SpeedTest -or $DnsCheck -or $Reach) {
-        Write-Host ('`n----- 网络性能检测（参考 MyIP 思路） -----') -ForegroundColor Cyan
-
-        if ($SpeedTest) {
-            Write-Step '网速测试（Cloudflare 测速端点：下载 / 上传 / 延迟 / 抖动）'
-            $sp = Test-NetSpeed
-            if ($sp.ok) {
-                if ($sp.ip) { Write-Info ('  接入点 : ' + $sp.ip + ' -> Cloudflare ' + $sp.colo + ' (' + $sp.loc + ')') }
-                if ($null -ne $sp.downloadMbps) { Write-Info ('  下载   : ' + $sp.downloadMbps + ' Mbps') } else { Write-Warn '  下载   : 测量失败' }
-                if ($null -ne $sp.uploadMbps)   { Write-Info ('  上传   : ' + $sp.uploadMbps + ' Mbps') } else { Write-Warn '  上传   : 测量失败' }
-                if ($null -ne $sp.latencyMs)    { Write-Info ('  延迟   : ' + $sp.latencyMs + ' ms（抖动 ' + $sp.jitterMs + ' ms）') } else { Write-Warn '  延迟   : 测量失败' }
-            }
-            else { Write-Err ('网速测试失败: ' + $sp.error) }
-        }
-
-        if ($DnsCheck) {
-            Write-Step 'DNS 解析器检测（判断出口 DNS 是否泄漏 / 与本地配置一致）'
-            $dns = Test-DnsResolver
-            if ($dns.ok) {
-                Write-Info ('  出口 DNS : ' + $dns.resolverIp + (if ($dns.resolverQuery) { ' (query ' + $dns.resolverQuery + ')' } else { '' }))
-                Write-Info ('  本地配置 : ' + ($dns.localDns -join ', '))
-                if ($dns.match) { Write-Ok '  出口 DNS 与本地配置一致' }
-                elseif ($dns.resolverIp) { Write-Warn '  出口 DNS 与本地配置不一致（可能经代理 / DNS 转发，或被接管）' }
-            }
-            else { Write-Err ('DNS 检测失败: ' + $dns.error) }
-        }
-
-        if ($Reach) {
-            Write-Step '服务可达性检测（Claude / ChatGPT / Google / GitHub / YouTube / WeChat）'
-            $svcs = Test-ServiceReachability
-            foreach ($s in $svcs) {
-                if ($s.reachable) { Write-Ok (('  {0,-8} 可达  RTT {1} ms' -f $s.name, $s.ms)) }
-                else { Write-Err (('  {0,-8} 不可达' -f $s.name)) }
-            }
-        }
     }
 
     # ---- 2) Python + ipcheck ----
