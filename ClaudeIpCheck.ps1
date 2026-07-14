@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Claude-IPCheck Toolkit —— 一键检测当前网络是否适合稳定使用 Claude AI
 
