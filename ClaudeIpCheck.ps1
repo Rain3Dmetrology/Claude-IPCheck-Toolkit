@@ -19,8 +19,15 @@
         （该页面是纯前端 JS 渲染，无法被脚本解析，只能人工看，因此不作为自动约束）。
       - 持续监测出口 IP 变化（Monitor 模式）：IP 稳定进入目标区域后自动跑检测。
       - 可选时间同步（w32tm /resync，需管理员权限，失败不致命）。
+      - 修复向导（-Remediate）：检测后根据「使用建议」逐项列出可自动修复项
+        （禁用 IPv6 / 清洁 DNS / 刷新 DNS 缓存 / 设置系统代理 / 同步时区），
+        每项先展示将要执行的命令、人工确认后再执行。
+        注：禁用 IPv6、修改 DNS 需管理员权限；TUN、WebRTC 泄漏为浏览器/代理软件侧，
+        脚本仅给出手动操作指引，无法直接修改。
 
-    全程不修改默认浏览器、不写入任何注册表。无需管理员权限即可运行。
+    全程不修改默认浏览器、不写入任何注册表（修复项仅改网络适配器绑定 / DNS /
+    系统代理与环境变量，均可在系统设置中还原）。无需管理员权限即可运行检测；
+    修复向导中需管理员权限的项会在非管理员下提示并以管理员身份重跑。
 
 .PARAMETER Monitor
     持续监测出口 IP 变化；当同一 IP 连续稳定 StablePolls 次轮询后，自动运行检测。
@@ -52,9 +59,19 @@
 .PARAMETER Once
     只跑一次检测即退出（默认行为，可省略）。
 
+.PARAMETER Remediate
+    检测完成后启动「网络修复向导」：根据「使用建议」逐项列出可自动修复项，
+    每项先展示将要执行的命令、人工确认（Y/N）后再执行。可输入多个编号（如 1,2,3）或 0 退出。
+    需要管理员权限的项（禁用 IPv6、修改 DNS）在非管理员下会被跳过并提示。
+    双击 Start-ClaudeIpCheck-Remediate.bat 即为此模式。
+
 .EXAMPLE
     # 一键检测（双击 Start-ClaudeIpCheck.bat 即为此模式）
     .\ClaudeIpCheck.ps1 -Once
+
+.EXAMPLE
+    # 检测后启动修复向导，逐项确认并自动修复
+    .\ClaudeIpCheck.ps1 -Once -Remediate
 
 .EXAMPLE
     # 持续监测，IP 稳定后自动检测，并在浏览器打开 ipinfo.cv 人工核对
@@ -75,7 +92,8 @@ param(
     [switch]$OpenIpInfoCv,
     [switch]$SkipInstall,
     [switch]$TimeSync,
-    [switch]$Once
+    [switch]$Once,
+    [switch]$Remediate
 )
 
 # ===================== 基础设置 =====================
@@ -221,6 +239,186 @@ function Open-Browser($url) {
     try { Start-Process $url } catch { Write-Warn ('无法打开浏览器: ' + $url) }
 }
 
+# ===================== 可选：网络修复向导 =====================
+# 说明：以下修复项仅修改网络适配器绑定 / DNS / 系统代理与环境变量，
+#       均可在系统设置中还原，不会写入敏感注册表。
+
+function Test-IsAdmin {
+    $id = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+    $p  = New-Object System.Security.Principal.WindowsPrincipal($id)
+    return $p.IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Disable-IPv6OnAdapters {
+    Write-Step '禁用所有活动网络适配器的 IPv6（防止 IPv6 泄漏真实地址）...'
+    try {
+        $adapters = Get-NetAdapter -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' }
+        if ($null -eq $adapters -or @($adapters).Count -eq 0) { Write-Warn '未找到活动网络适配器'; return }
+        $ok = 0
+        foreach ($a in $adapters) {
+            try {
+                Disable-NetAdapterBinding -Name $a.Name -ComponentID ms_tcpip6 -ErrorAction Stop
+                Write-Ok ('  已禁用 IPv6: ' + $a.Name)
+                $ok++
+            }
+            catch {
+                # 回退到 netsh
+                try {
+                    & netsh interface ipv6 set interface "$($a.Name)" disabled 2>&1 | Out-Null
+                    Write-Ok ('  已禁用 IPv6 (netsh): ' + $a.Name)
+                    $ok++
+                }
+                catch {
+                    Write-Warn ('  禁用失败 ' + $a.Name + ': ' + $_.Exception.Message)
+                }
+            }
+        }
+        if ($ok -gt 0) { Write-Ok ('共禁用 ' + $ok + ' 个适配器的 IPv6') }
+    }
+    catch {
+        Write-Err ('获取网络适配器失败（可能不支持 NetAdapter 模块）: ' + $_.Exception.Message)
+    }
+}
+
+function Clear-DnsCache {
+    Write-Step '刷新 DNS 缓存 (ipconfig /flushdns) ...'
+    try {
+        $r = (ipconfig /flushdns 2>&1 | Out-String)
+        if ($r -match 'successfully' -or $r -match '已成功') { Write-Ok 'DNS 缓存已刷新' }
+        else { Write-Info $r.Trim() }
+    }
+    catch {
+        Write-Warn ('刷新失败: ' + $_.Exception.Message)
+    }
+}
+
+function Set-CleanDns([string[]]$DnsServers) {
+    Write-Step ('设置清洁 DNS 为 ' + ($DnsServers -join ' / ') + ' ...')
+    try {
+        $adapters = Get-NetAdapter -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' }
+        if ($null -eq $adapters -or @($adapters).Count -eq 0) { Write-Warn '未找到活动网络适配器'; return }
+        $ok = 0
+        foreach ($a in $adapters) {
+            try {
+                Set-DnsClientServerAddress -InterfaceIndex $a.ifIndex -ServerAddresses $DnsServers -ErrorAction Stop
+                Write-Ok ('  已设置 DNS: ' + $a.Name + ' -> ' + ($DnsServers -join ', '))
+                $ok++
+            }
+            catch {
+                try {
+                    & netsh interface ip set dns name="$($a.Name)" static $($DnsServers[0]) 2>&1 | Out-Null
+                    for ($i = 1; $i -lt $DnsServers.Count; $i++) {
+                        & netsh interface ip add dns name="$($a.Name)" $($DnsServers[$i]) index=2 2>&1 | Out-Null
+                    }
+                    Write-Ok ('  已设置 DNS (netsh): ' + $a.Name)
+                    $ok++
+                }
+                catch {
+                    Write-Warn ('  设置失败 ' + $a.Name + ': ' + $_.Exception.Message)
+                }
+            }
+        }
+        if ($ok -gt 0) {
+            Write-Ok ('共设置 ' + $ok + ' 个适配器的 DNS')
+            Clear-DnsCache
+        }
+    }
+    catch {
+        Write-Err ('获取网络适配器失败: ' + $_.Exception.Message)
+    }
+}
+
+function Set-SystemProxy {
+    Write-Step '设置系统代理 ...'
+    $addr = Read-Host '请输入代理服务器地址（如 127.0.0.1:7890，留空跳过）'
+    if ([string]::IsNullOrWhiteSpace($addr)) { Write-Info '已跳过代理设置'; return }
+    try {
+        # 设置系统代理（注册表，当前用户）
+        $reg = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+        Set-ItemProperty -Path $reg -Name ProxyEnable -Value 1 -ErrorAction Stop
+        Set-ItemProperty -Path $reg -Name ProxyServer -Value $addr -ErrorAction Stop
+        # 写入环境变量（当前进程 + 用户级，供后续命令行工具使用）
+        $env:HTTP_PROXY  = "http://$addr"; $env:HTTPS_PROXY = "http://$addr"
+        $env:http_proxy  = "http://$addr"; $env:https_proxy = "http://$addr"
+        [Environment]::SetEnvironmentVariable('HTTP_PROXY',  "http://$addr", 'User')
+        [Environment]::SetEnvironmentVariable('HTTPS_PROXY', "http://$addr", 'User')
+        [Environment]::SetEnvironmentVariable('http_proxy',  "http://$addr", 'User')
+        [Environment]::SetEnvironmentVariable('https_proxy', "http://$addr", 'User')
+        Write-Ok ('已设置系统代理为 ' + $addr + ' 并写入用户级环境变量')
+        Write-Warn '提示：需重启浏览器 / 部分应用才能生效；取消代理可在「设置 → 网络 → 代理」中关闭「使用代理服务器」。'
+    }
+    catch {
+        Write-Err ('设置代理失败: ' + $_.Exception.Message)
+    }
+}
+
+function Sync-TimeForce {
+    Write-Step '时间同步 (w32tm /resync) ...'
+    try {
+        $r = (w32tm /resync 2>&1 | Out-String)
+        if ($r -match 'successfully' -or $r -match '成功') { Write-Ok '时钟已同步' }
+        else { Write-Warn ('同步结果: ' + $r.Trim()) }
+    }
+    catch { Write-Warn '需要管理员权限才能同步时钟，已跳过' }
+}
+
+function Show-WebRtcGuide {
+    Write-Host ''
+    Write-Warn 'WebRTC 本地 IP 泄漏需在浏览器中关闭 WebRTC，脚本无法直接修改浏览器内核：'
+    Write-Info '  - Chrome / Edge：安装扩展「WebRTC Leak Prevent」或「uBlock Origin」（开启「防止 WebRTC 泄漏」）。'
+    Write-Info '  - Firefox：地址栏输入 about:config，设置 media.peerconnection.enabled = false。'
+    Write-Info '  - 或使用支持「禁用 WebRTC」的代理客户端（如 Clash / v2rayN 的 TUN 模式）。'
+}
+
+function Start-Remediation {
+    $admin = Test-IsAdmin
+    Write-Host ('`n========== 网络修复向导 ==========') -ForegroundColor Magenta
+    if (-not $admin) {
+        Write-Warn '当前未以管理员身份运行：禁用 IPv6、修改 DNS 需要管理员权限，相关项将被跳过。'
+        Write-Info '如需完整修复，请右键「以管理员身份运行」本 .bat 或 PowerShell。'
+    }
+
+    $menu = @(
+        @{ Key='1'; Name='禁用 IPv6（防止 IPv6 泄漏真实地址）';        NeedAdmin=$true;  Action={ Disable-IPv6OnAdapters } }
+        @{ Key='2'; Name='设置清洁 DNS（1.1.1.1 / 8.8.8.8）';         NeedAdmin=$true;  Action={ Set-CleanDns @('1.1.1.1','8.8.8.8') } }
+        @{ Key='3'; Name='刷新 DNS 缓存';                              NeedAdmin=$false; Action={ Clear-DnsCache } }
+        @{ Key='4'; Name='设置系统代理 / 环境变量';                   NeedAdmin=$false; Action={ Set-SystemProxy } }
+        @{ Key='5'; Name='同步系统时区';                              NeedAdmin=$false; Action={ Sync-TimeForce } }
+        @{ Key='6'; Name='查看 WebRTC 泄漏手动修复指引';              NeedAdmin=$false; Action={ Show-WebRtcGuide } }
+    )
+
+    while ($true) {
+        Write-Host ''
+        Write-Host '可修复项（输入编号，多个用逗号分隔；输入 0 退出）：' -ForegroundColor Cyan
+        foreach ($m in $menu) {
+            $tag = if ($m.NeedAdmin -and -not $admin) { ' [需管理员]' } else { '' }
+            Write-Host ('  [' + $m.Key + '] ' + $m.Name + $tag)
+        }
+        $input = Read-Host '请选择'
+        if ([string]::IsNullOrWhiteSpace($input) -or $input.Trim() -eq '0') { Write-Info '已退出修复向导'; break }
+        $keys = $input -split '[, ]' | Where-Object { $_ -match '^\d+$' }
+        $any = $false
+        foreach ($k in $keys) {
+            $m = $menu | Where-Object { $_.Key -eq $k }
+            if ($null -eq $m) { continue }
+            if ($m.NeedAdmin -and -not $admin) {
+                Write-Warn ('项 [' + $m.Key + '] 需要管理员权限，当前跳过。请以管理员身份重新运行。')
+                continue
+            }
+            $any = $true
+            Write-Host ('`n>>> 即将执行：' + $m.Name) -ForegroundColor Yellow
+            $confirm = Read-Host '确认执行？ (Y/N)'
+            if ($confirm -match '^[Yy]') {
+                & $m.Action
+            }
+            else {
+                Write-Info ('已跳过：' + $m.Name)
+            }
+        }
+        if (-not $any) { Write-Warn '未识别到有效选项，请重试' }
+    }
+}
+
 # ===================== 主检测流程 =====================
 function Run-Once($ip) {
     Write-Host ('`n========== Claude-IPCheck 检测 ==========') -ForegroundColor Magenta
@@ -310,6 +508,18 @@ function Run-Once($ip) {
     }
     else {
         Write-Ok '低风险：当前网络环境适合稳定使用 Claude。'
+    }
+
+    # ---- 6) 可选：网络修复向导 ----
+    if ($Remediate) {
+        Write-Host ''
+        $go = Read-Host '是否根据建议进行自动修复？（Y/N）'
+        if ($go -match '^[Yy]') {
+            Start-Remediation
+        }
+        else {
+            Write-Info '跳过自动修复'
+        }
     }
 
     if ($OpenIpInfoCv) {

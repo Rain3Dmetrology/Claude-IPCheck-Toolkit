@@ -35,12 +35,22 @@
 双击 **`Start-ClaudeIpCheck-Monitor.bat`**：脚本每 15 秒看一次出口 IP，
 等 IP 稳定后自动跑一次完整检测。`Ctrl+C` 退出。
 
+### 方式 C：检测 + 一键修复向导（推荐进阶）
+双击 **`Start-ClaudeIpCheck-Remediate.bat`**：先跑完整检测，再根据「使用建议」
+启动**修复向导**——逐项列出可自动修复项，每项先展示将要执行的命令、
+人工确认（Y/N）后再执行。可输入多个编号（如 `1,2,4`）或 `0` 退出。
+
+> 修复项包括：禁用 IPv6、设置清洁 DNS（1.1.1.1 / 8.8.8.8）、刷新 DNS 缓存、
+> 设置系统代理 / 环境变量、同步系统时区。其中**禁用 IPv6、修改 DNS 需要管理员权限**，
+> 请以「管理员身份运行」该 .bat 以获得完整修复能力；TUN 全局代理、WebRTC 泄漏属
+> 浏览器 / 代理软件侧，脚本仅给出手动操作指引，无法直接修改。
+
 ---
 
 ## 三、命令行参数
 
 在 `ClaudeIpCheck.ps1` 后追加参数即可，例如：
-`powershell -File ClaudeIpCheck.ps1 -Monitor -OpenIpInfoCv`
+`pwsh -File ClaudeIpCheck.ps1 -Monitor -OpenIpInfoCv`
 
 | 参数 | 说明 | 默认 |
 | --- | --- | --- |
@@ -53,6 +63,7 @@
 | `-OpenIpInfoCv` | 检测后打开 ipinfo.cv 供人工核对 | 关 |
 | `-SkipInstall` | 跳过自动安装 ai-ipcheck（已装好时用） | 关 |
 | `-TimeSync` | 开启时钟同步（w32tm /resync，通常需管理员） | 关 |
+| `-Remediate` | 检测后启动修复向导，逐项确认并自动修复 | 关 |
 
 ---
 
@@ -114,6 +125,7 @@ Claude-IPCheck-Toolkit/
 ├── ClaudeIpCheck.ps1              # 主脚本
 ├── Start-ClaudeIpCheck.bat        # 双击：单次检测
 ├── Start-ClaudeIpCheck-Monitor.bat# 双击：持续监测
+├── Start-ClaudeIpCheck-Remediate.bat # 双击：检测 + 修复向导
 ├── SKILL.md                       # Agent Skills 标准（WorkBuddy / Qoder / Trae / Claude Code 共用）
 ├── AGENTS.md                      # 通用指令文件（Codex 及所有读 AGENTS.md 的工具）
 ├── codex.md                       # Codex 专用指令（内容同 AGENTS.md）

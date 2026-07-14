@@ -10,20 +10,22 @@ The user asks whether their network/IP can use Claude, wants an "IP check" / "ip
 ## What it does
 1. **Structured cross-validation** via the free ip-api.com JSON API: country/region, ISP, ASN, org, and a heuristic判断 of datacenter/cloud IP (high risk for Claude).
 2. **Claude-specific check** via `stormzhang/ipcheck` (`ai-ipcheck` pip package): IP geolocation, DNS leak, proxy, timezone consistency, Claude endpoint reachability, datacenter risk → final **Low / Medium / High** verdict + score.
+3. **Optional remediation wizard** (`-Remediate`): after the check, lists fixable items (disable IPv6, clean DNS, flush DNS, set system proxy, sync timezone). Each shows its command and runs only after a manual Y/N confirmation. Admin-only items (IPv6, DNS) must run as administrator.
 
 ## How to deploy (Windows only)
 1. Locate `ClaudeIpCheck.ps1` and the two `.bat` launchers.
 2. Ensure Python 3.10+ on PATH (`python --version`). If missing, ask the user to install from https://www.python.org/downloads/ with "Add to PATH" ticked. Do not silently install Python.
 3. Run:
-   - One-shot: `powershell -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
+   - One-shot: `pwsh -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
    - Monitor: append `-Monitor` (optionally `-OpenIpInfoCv` to open ipinfo.cv manually).
+   - Check + remediation wizard: append `-Once -Remediate` (each fix confirmed before running).
 4. Interpret:
    - **Low (green)**: clean, safe to use Claude.
    - **Medium (yellow)**: enable global TUN, disable WebRTC local-IP leak, use clean DNS (1.1.1.1), avoid shared IPs.
    - **High (red)**: not recommended — switch to residential/home IP or compliant proxy.
 
 ## Constraints
-- Does NOT change default browser, write registry, or require admin (only `-TimeSync` may need admin).
+- Does NOT change default browser or write registry. The remediation wizard only changes network bindings / DNS / system proxy and env vars, all restorable. The check needs no admin; `-Remediate` admin items (IPv6, DNS) must run as administrator.
 - `ipinfo.cv/claude-ai-check` is client-side JS; only use as manual `-OpenIpInfoCv` cross-check, never an automated gate.
 - First run auto-installs `ai-ipcheck` via pip. On failure: `python -m pip install -U ai-ipcheck -i https://pypi.tuna.tsinghua.edu.cn/simple`.
-- Windows + PowerShell 5.1+ only.
+- Windows + PowerShell 7 (pwsh) only.
