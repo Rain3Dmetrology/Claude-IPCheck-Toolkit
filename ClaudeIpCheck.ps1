@@ -20,9 +20,10 @@
       - 持续监测出口 IP 变化（Monitor 模式）：IP 稳定进入目标区域后自动跑检测。
       - 可选时间同步（w32tm /resync，需管理员权限，失败不致命）。
       - 修复向导（-Remediate）：检测后根据「使用建议」逐项列出可自动修复项
-        （禁用 IPv6 / 清洁 DNS / 刷新 DNS 缓存 / 设置系统代理 / 同步时区），
-        每项先展示将要执行的命令、人工确认后再执行。
-        注：禁用 IPv6、修改 DNS 需管理员权限；TUN、WebRTC 泄漏为浏览器/代理软件侧，
+        （禁用 IPv6 / 清洁 DNS / 刷新 DNS 缓存 / 设置系统代理 /
+         按出口 IP 自动设置系统时区并对时），每项先展示将要执行的命令、人工确认后再执行。
+        非管理员运行时，向导会询问是否自动以管理员身份重新启动，确保需提权的项真正生效。
+        注：禁用 IPv6、修改 DNS、设置时区 需管理员权限；TUN、WebRTC 泄漏为浏览器/代理软件侧，
         脚本仅给出手动操作指引，无法直接修改。
 
     全程不修改默认浏览器、不写入任何注册表（修复项仅改网络适配器绑定 / DNS /
@@ -62,7 +63,10 @@
 .PARAMETER Remediate
     检测完成后启动「网络修复向导」：根据「使用建议」逐项列出可自动修复项，
     每项先展示将要执行的命令、人工确认（Y/N）后再执行。可输入多个编号（如 1,2,3）或 0 退出。
-    需要管理员权限的项（禁用 IPv6、修改 DNS）在非管理员下会被跳过并提示。
+    需要管理员权限的项（禁用 IPv6、修改 DNS、按 IP 设置时区）在非管理员下，
+    向导会询问是否自动以管理员身份重新启动；同意后在新窗口中完成完整修复。
+    其中「按出口 IP 自动设置系统时区」会读取出口 IP 的时区（如日本→Tokyo Standard Time），
+    调用 Set-TimeZone 修改系统时区后再对时，解决「多次对时仍是原时区」的问题。
     双击 Start-ClaudeIpCheck-Remediate.bat 即为此模式。
 
 .EXAMPLE
@@ -362,6 +366,83 @@ function Sync-TimeForce {
     catch { Write-Warn '需要管理员权限才能同步时钟，已跳过' }
 }
 
+# 将 IANA 时区名（如 Asia/Tokyo）转换为 Windows 时区 ID（如 Tokyo Standard Time）
+function Convert-IanaToWindowsTimeZone([string]$iana) {
+    if ([string]::IsNullOrWhiteSpace($iana)) { return '' }
+    # 优先使用 .NET 6+/PowerShell 7 内置转换
+    try {
+        $win = ''
+        if ([System.TimeZoneInfo]::TryConvertIanaIdToWindowsId($iana, [ref]$win)) {
+            if (-not [string]::IsNullOrWhiteSpace($win)) { return $win }
+        }
+    }
+    catch { }
+    # 回退：常见地区手工映射（覆盖代理常用出口地）
+    $map = @{
+        'Asia/Tokyo'         = 'Tokyo Standard Time'
+        'Asia/Osaka'         = 'Tokyo Standard Time'
+        'Asia/Seoul'         = 'Korea Standard Time'
+        'Asia/Hong_Kong'     = 'China Standard Time'
+        'Asia/Shanghai'      = 'China Standard Time'
+        'Asia/Taipei'        = 'Taipei Standard Time'
+        'Asia/Singapore'     = 'Singapore Standard Time'
+        'Asia/Kuala_Lumpur'  = 'Singapore Standard Time'
+        'Asia/Bangkok'       = 'SE Asia Standard Time'
+        'Asia/Kolkata'       = 'India Standard Time'
+        'Asia/Dubai'         = 'Arabian Standard Time'
+        'Europe/London'      = 'GMT Standard Time'
+        'Europe/Paris'       = 'W. Europe Standard Time'
+        'Europe/Berlin'      = 'W. Europe Standard Time'
+        'Europe/Amsterdam'   = 'W. Europe Standard Time'
+        'Europe/Moscow'      = 'Russian Standard Time'
+        'America/New_York'   = 'Eastern Standard Time'
+        'America/Chicago'    = 'Central Standard Time'
+        'America/Denver'     = 'Mountain Standard Time'
+        'America/Los_Angeles'= 'Pacific Standard Time'
+        'America/Toronto'    = 'Eastern Standard Time'
+        'Australia/Sydney'   = 'AUS Eastern Standard Time'
+        'UTC'                = 'UTC'
+    }
+    if ($map.ContainsKey($iana)) { return $map[$iana] }
+    return ''
+}
+
+# 根据出口 IP 的时区，自动设置 Windows 系统时区并同步时间（需管理员权限）
+function Set-TimeZoneByIp($ipInfo) {
+    Write-Step '根据出口 IP 自动设置系统时区 ...'
+    if ($null -eq $ipInfo) { $ipInfo = Get-IpApiInfo }
+    if ($null -eq $ipInfo -or [string]::IsNullOrWhiteSpace($ipInfo.timezone)) {
+        Write-Warn '  无法获取出口 IP 的时区信息，改为仅同步时间'
+        Sync-TimeForce
+        return
+    }
+    $iana = $ipInfo.timezone
+    Write-Info ('  出口 IP 时区 (IANA): ' + $iana + '  国家: ' + $ipInfo.country)
+    $winId = Convert-IanaToWindowsTimeZone $iana
+    if ([string]::IsNullOrWhiteSpace($winId)) {
+        Write-Warn ('  无法将 ' + $iana + ' 映射到 Windows 时区 ID，改为仅同步时间')
+        Sync-TimeForce
+        return
+    }
+    $cur = (Get-TimeZone).Id
+    if ($cur -eq $winId) {
+        Write-Ok ('  当前系统时区已是 ' + $winId + '，无需更改')
+    }
+    else {
+        try {
+            Set-TimeZone -Id $winId -ErrorAction Stop
+            Write-Ok ('  系统时区已从 [' + $cur + '] 改为 [' + $winId + ']')
+        }
+        catch {
+            Write-Err ('  设置时区失败（需管理员权限）: ' + $_.Exception.Message)
+            return
+        }
+    }
+    Sync-TimeForce
+    $now = Get-Date
+    Write-Ok ('  当前系统时间: ' + $now.ToString('yyyy-MM-dd HH:mm:ss') + '  (' + (Get-TimeZone).Id + ')')
+}
+
 function Show-WebRtcGuide {
     Write-Host ''
     Write-Warn 'WebRTC 本地 IP 泄漏需在浏览器中关闭 WebRTC，脚本无法直接修改浏览器内核：'
@@ -370,12 +451,31 @@ function Show-WebRtcGuide {
     Write-Info '  - 或使用支持「禁用 WebRTC」的代理客户端（如 Clash / v2rayN 的 TUN 模式）。'
 }
 
-function Start-Remediation {
+function Start-Remediation($ipInfo) {
     $admin = Test-IsAdmin
-    Write-Host ('`n========== 网络修复向导 ==========') -ForegroundColor Magenta
+    Write-Host "`n========== 网络修复向导 ==========" -ForegroundColor Magenta
+
+    # ---- A：非管理员时，尝试自动提权重跑，确保需管理员的项真正生效 ----
     if (-not $admin) {
-        Write-Warn '当前未以管理员身份运行：禁用 IPv6、修改 DNS 需要管理员权限，相关项将被跳过。'
-        Write-Info '如需完整修复，请右键「以管理员身份运行」本 .bat 或 PowerShell。'
+        Write-Warn '当前未以管理员身份运行：禁用 IPv6 / 修改 DNS / 设置系统时区 均需要管理员权限。'
+        $ele = Read-Host '是否以管理员身份重新运行以启用完整修复？(Y/N)'
+        if ($ele -match '^[Yy]') {
+            try {
+                $exe = (Get-Process -Id $PID).Path
+                if ([string]::IsNullOrWhiteSpace($exe)) { $exe = 'pwsh' }
+                $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $PSCommandPath + '"'), '-Once', '-Remediate')
+                Start-Process -FilePath $exe -Verb RunAs -ArgumentList $argList
+                Write-Info '已请求以管理员身份重新启动，请在新弹出的窗口中继续操作。本窗口即将退出。'
+                return
+            }
+            catch {
+                Write-Err ('提权启动失败: ' + $_.Exception.Message)
+                Write-Info '将以当前权限继续（需管理员的项会被跳过）。'
+            }
+        }
+        else {
+            Write-Info '将以当前权限继续（需管理员的项会被跳过）。'
+        }
     }
 
     $menu = @(
@@ -383,7 +483,7 @@ function Start-Remediation {
         @{ Key='2'; Name='设置清洁 DNS（1.1.1.1 / 8.8.8.8）';         NeedAdmin=$true;  Action={ Set-CleanDns @('1.1.1.1','8.8.8.8') } }
         @{ Key='3'; Name='刷新 DNS 缓存';                              NeedAdmin=$false; Action={ Clear-DnsCache } }
         @{ Key='4'; Name='设置系统代理 / 环境变量';                   NeedAdmin=$false; Action={ Set-SystemProxy } }
-        @{ Key='5'; Name='同步系统时区';                              NeedAdmin=$false; Action={ Sync-TimeForce } }
+        @{ Key='5'; Name='按出口 IP 自动设置系统时区并对时';          NeedAdmin=$true;  Action={ Set-TimeZoneByIp $ipInfo } }
         @{ Key='6'; Name='查看 WebRTC 泄漏手动修复指引';              NeedAdmin=$false; Action={ Show-WebRtcGuide } }
     )
 
@@ -406,7 +506,7 @@ function Start-Remediation {
                 continue
             }
             $any = $true
-            Write-Host ('`n>>> 即将执行：' + $m.Name) -ForegroundColor Yellow
+            Write-Host ("`n>>> 即将执行：" + $m.Name) -ForegroundColor Yellow
             $confirm = Read-Host '确认执行？ (Y/N)'
             if ($confirm -match '^[Yy]') {
                 & $m.Action
@@ -515,7 +615,7 @@ function Run-Once($ip) {
         Write-Host ''
         $go = Read-Host '是否根据建议进行自动修复？（Y/N）'
         if ($go -match '^[Yy]') {
-            Start-Remediation
+            Start-Remediation $ip
         }
         else {
             Write-Info '跳过自动修复'
