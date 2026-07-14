@@ -3,12 +3,13 @@
 > 一键检测「当前 Windows 网络环境是否适合稳定、低风控地使用 Claude AI」。
 
 本工具面向普通 Windows 用户，无需改注册表、不修改默认浏览器、不需要管理员权限。
-它把两套检测合在一起，互相印证：
+它把两套核心检测合在一起，互相印证（另含一套**可选**的网络性能检测层）：
 
 | 检测层 | 工具 | 看什么 |
 | --- | --- | --- |
 | **结构化交叉验证**（默认开） | [ip-api.com](http://ip-api.com/json) 免费 JSON API | 出口 IP 的国家/地区、ISP、ASN、组织，并判断是否为「机房/数据中心 IP」（Claude 风控高风险项） |
 | **Claude 专项检测**（核心） | [stormzhang/ipcheck](https://github.com/stormzhang/ipcheck)（`ai-ipcheck`） | IP 属地、DNS 泄漏、代理、时区、Claude 端点可达性、数据中心风险 → 给出 **低 / 中 / 高** 风险综合结论 + 评分 |
+| **网络性能检测**（可选） | 参考 [MyIP](https://github.com/jason5ng32/MyIP)，复用 Cloudflare 测速端点 + edns.ip-api.com | 网速（下载/上传 + 延迟/抖动）、DNS 解析器检测、服务可达性，需 `-SpeedTest`/`-DnsCheck`/`-Reach`/`-NetPerf` 开启 |
 
 > 为什么不用 `ipinfo.cv/claude-ai-check` 做自动判定？
 > 该页面是纯前端 JavaScript 渲染，脚本抓取不到结论（只拿到一个 5 KB 的空壳）。
@@ -53,8 +54,16 @@
 | `-OpenIpInfoCv` | 检测后打开 ipinfo.cv 供人工核对 | 关 |
 | `-SkipInstall` | 跳过自动安装 ai-ipcheck（已装好时用） | 关 |
 | `-TimeSync` | 开启时钟同步（w32tm /resync，通常需管理员） | 关 |
+| `-SpeedTest` | 网速测试（参考 MyIP）：下载/上传带宽(Mbps) + 延迟/抖动(ms)，并显示就近接入的 Cloudflare 节点 | 关 |
+| `-DnsCheck` | DNS 解析器检测：查询出口 DNS 是否与你本地网卡配置一致（泄漏/被接管迹象） | 关 |
+| `-Reach` | 服务可达性：测 Claude / ChatGPT / Google / GitHub / YouTube / WeChat 的 RTT | 关 |
+| `-NetPerf` | 一次性开启以上三项（= -SpeedTest -DnsCheck -Reach） | 关 |
 
 ---
+
+> **网络性能检测（可选，参考 [MyIP](https://github.com/jason5ng32/MyIP) 思路）**：脚本内置网速、DNS 解析器、服务可达性三项检测，默认关闭。
+> 分别用 `-SpeedTest`（下载/上传带宽 + 延迟/抖动）、`-DnsCheck`（出口 DNS 是否泄漏/被接管）、`-Reach`（Claude/ChatGPT/Google 等 RTT）开启，或用 `-NetPerf` 一次性全开。
+> 示例：`powershell -File ClaudeIpCheck.ps1 -Once -NetPerf`（测速走 Cloudflare 公共服务，DNS 走免费 edns.ip-api.com，均无付费依赖）。
 
 ## 四、结果怎么看
 
@@ -114,6 +123,7 @@ Claude-IPCheck-Toolkit/
 ├── ClaudeIpCheck.ps1              # 主脚本
 ├── Start-ClaudeIpCheck.bat        # 双击：单次检测
 ├── Start-ClaudeIpCheck-Monitor.bat# 双击：持续监测
+├── Start-ClaudeIpCheck-NetPerf.bat# 双击：单次检测 + 网络性能检测（-NetPerf）
 ├── SKILL.md                       # Agent Skills 标准（WorkBuddy / Qoder / Trae / Claude Code 共用）
 ├── AGENTS.md                      # 通用指令文件（Codex 及所有读 AGENTS.md 的工具）
 ├── codex.md                       # Codex 专用指令（内容同 AGENTS.md）

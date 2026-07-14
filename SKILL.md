@@ -1,7 +1,7 @@
 ---
 name: claude-ipcheck-toolkit
-description: 一键检测 Windows 网络环境是否适合稳定、低风控地使用 Claude AI。自动用结构化 JSON IP API（ip-api.com）做交叉验证（国家/地区、ISP、ASN、是否为机房/数据中心 IP），并运行 stormzhang/ipcheck 给出低/中/高风险综合结论与评分；支持单次检测与持续监测出口 IP。适用于「我的网络能不能用 Claude」「IP 检测」「ipcheck」「Claude 风控」等场景。
-version: 1.0.0
+description: 一键检测 Windows 网络环境是否适合稳定、低风控地使用 Claude AI。自动用结构化 JSON IP API（ip-api.com）做交叉验证（国家/地区、ISP、ASN、是否为机房/数据中心 IP），并运行 stormzhang/ipcheck 给出低/中/高风险综合结论与评分；可选网络性能检测（网速/DNS 解析器/服务可达性，参考 MyIP）；支持单次检测与持续监测出口 IP。适用于「我的网络能不能用 Claude」「IP 检测」「ipcheck」「Claude 风控」「网速测试」等场景。
+version: 1.1.0
 agent_created: true
 tags: [network, claude, ipcheck, vpn, diagnostic, windows, deployment]
 ---
@@ -22,6 +22,7 @@ tags: [network, claude, ipcheck, vpn, diagnostic, windows, deployment]
 | `ClaudeIpCheck.ps1` | 主脚本（结构化交叉验证 + stormzhang/ipcheck，无默认浏览器修改、无注册表写入） |
 | `Start-ClaudeIpCheck.bat` | 双击 = 单次检测 |
 | `Start-ClaudeIpCheck-Monitor.bat` | 双击 = 持续监测出口 IP 变化 |
+| `Start-ClaudeIpCheck-NetPerf.bat` | 双击 = 单次检测 + 网络性能检测（-NetPerf：网速/DNS/可达性） |
 | `screenshots/ipcheck-output-example.png` | 输出示例，供 README 与解释时引用 |
 
 ## 部署流程（在用户 Windows 机器上执行）
@@ -32,10 +33,12 @@ tags: [network, claude, ipcheck, vpn, diagnostic, windows, deployment]
 4. **运行检测**（询问用户偏好后二选一）：
    - 单次：`powershell -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
    - 监测：追加 `-Monitor`（可选 `-OpenIpInfoCv` 在浏览器打开 ipinfo.cv 供人工核对）。
+   - 网络性能检测：追加 `-NetPerf`（= `-SpeedTest -DnsCheck -Reach`），额外测网速 / DNS 解析器 / 服务可达性（参考 MyIP）。
 5. **解释结果**：
    - 低/中/高风险 + 评分来自 ipcheck（核心结论）。
    - 结构化交叉验证独立给出出口 IP 属地与「是否机房/数据中心 IP」。
    - 高风险 → 建议换家庭/住宅 IP 或合规代理；中风险 → 建议开全局 TUN、关 WebRTC 本地 IP 泄漏、用清洁 DNS（如 1.1.1.1）、避免多人共用同一 IP。
+   - 网络性能检测（若开启 `-NetPerf`）：网速看下载/上传 Mbps 与延迟/抖动；DNS 检测看出口 DNS 是否与本地一致（不一致可能经代理/DNS 转发）；服务可达性看各站点 RTT。
 
 ## 重要约束
 

@@ -9,6 +9,7 @@ Use this toolkit when the user asks whether their network/IP can use Claude, wan
 Two layered checks that corroborate each other:
 1. **Structured cross-validation** via the free ip-api.com JSON API: country/region, ISP, ASN, organization, and a heuristic判断 of whether the exit IP is a datacenter/cloud IP (a high risk factor for Claude).
 2. **Claude-specific check** via `stormzhang/ipcheck` (the `ai-ipcheck` pip package): IP geolocation, DNS leak, proxy state, timezone consistency, Claude endpoint reachability, datacenter risk → final **Low / Medium / High** risk verdict + score.
+3. **Optional network-performance check** (inspired by [MyIP](https://github.com/jason5ng32/MyIP)): speed test via Cloudflare endpoints (download/upload Mbps + latency/jitter), DNS resolver detection (edns.ip-api.com, no key required), and service reachability (Claude/ChatGPT/Google/GitHub/YouTube/WeChat RTT). Enabled with `-SpeedTest`/`-DnsCheck`/`-Reach`, or all at once via `-NetPerf`. Off by default.
 
 ## How to deploy (Windows only)
 1. Locate this toolkit's files: `ClaudeIpCheck.ps1` and the two `.bat` launchers (`Start-ClaudeIpCheck.bat`, `Start-ClaudeIpCheck-Monitor.bat`).
@@ -17,6 +18,7 @@ Two layered checks that corroborate each other:
    - One-shot: `powershell -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
    - Monitor (auto-detect after VPN IP stabilizes): append `-Monitor`
    - Optionally append `-OpenIpInfoCv` to open ipinfo.cv in a browser for manual cross-check.
+   - Optionally append `-NetPerf` to also run the network-performance check (speed test, DNS resolver, service reachability).
 4. Interpret results:
    - **Low (green)**: clean environment, safe to use Claude.
    - **Medium (yellow)**: usable but improve — enable global TUN, disable WebRTC local-IP leak, use clean DNS (e.g. 1.1.1.1), avoid shared IPs.

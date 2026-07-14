@@ -10,6 +10,7 @@ The user asks whether their network/IP can use Claude, wants an "IP check" / "ip
 ## What it does
 1. **Structured cross-validation** via the free ip-api.com JSON API: country/region, ISP, ASN, org, and a heuristic判断 of datacenter/cloud IP (high risk for Claude).
 2. **Claude-specific check** via `stormzhang/ipcheck` (`ai-ipcheck` pip package): IP geolocation, DNS leak, proxy, timezone consistency, Claude endpoint reachability, datacenter risk → final **Low / Medium / High** verdict + score.
+3. **Optional network-performance check** (inspired by [MyIP](https://github.com/jason5ng32/MyIP)): speed test via Cloudflare endpoints (download/upload Mbps + latency/jitter), DNS resolver detection (edns.ip-api.com, no key), and service reachability (Claude/ChatGPT/Google/GitHub/YouTube/WeChat RTT). Enabled with `-SpeedTest`/`-DnsCheck`/`-Reach`, or all at once via `-NetPerf`. Off by default.
 
 ## How to deploy (Windows only)
 1. Locate `ClaudeIpCheck.ps1` and the two `.bat` launchers.
@@ -17,6 +18,7 @@ The user asks whether their network/IP can use Claude, wants an "IP check" / "ip
 3. Run:
    - One-shot: `powershell -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
    - Monitor: append `-Monitor` (optionally `-OpenIpInfoCv` to open ipinfo.cv manually).
+   - Network performance: append `-NetPerf` to also run speed test, DNS resolver, and service reachability checks.
 4. Interpret:
    - **Low (green)**: clean, safe to use Claude.
    - **Medium (yellow)**: enable global TUN, disable WebRTC local-IP leak, use clean DNS (1.1.1.1), avoid shared IPs.
