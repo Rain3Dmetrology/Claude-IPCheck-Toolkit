@@ -31,7 +31,7 @@ tags: [network, claude, ipcheck, vpn, diagnostic, windows, deployment]
 2. **复制三个文件**到用户指定的 Windows 目录（默认建议 `桌面\Claude-IPCheck-Toolkit\`）：用文件工具把 `ClaudeIpCheck.ps1`、两个 `.bat` 复制到目标目录。
 3. **确认 Python 3.10+**：运行 `python --version`（或 `py --version`）。若未安装或版本过低，提示用户从 https://www.python.org/downloads/ 安装，并**务必勾选 Add to PATH**；不要替用户静默安装 Python。
 4. **运行检测**（询问用户偏好后二选一）：
-   - 单次：`powershell -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
+   - 单次：`pwsh -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
    - 监测：追加 `-Monitor`（可选 `-OpenIpInfoCv` 在浏览器打开 ipinfo.cv 供人工核对）。
    - 网络性能检测：追加 `-NetPerf`（= `-SpeedTest -DnsCheck -Reach`），额外测网速 / DNS 解析器 / 服务可达性（参考 MyIP）。
 5. **解释结果**：
@@ -45,10 +45,11 @@ tags: [network, claude, ipcheck, vpn, diagnostic, windows, deployment]
 - 本工具**不修改默认浏览器、不写注册表、不需要管理员权限**（仅 `-TimeSync` 时钟同步可能需要）。
 - `ipinfo.cv/claude-ai-check` 是纯前端 JS 渲染页面，脚本无法解析其结论；仅作为 `-OpenIpInfoCv` 的人工核对入口，绝不作为自动判定依据。
 - 首次运行自动 `python -m pip install -U ai-ipcheck`，需联网；失败则提示用户手动安装或换源（`-i https://pypi.tuna.tsinghua.edu.cn/simple`）。
-- 仅支持 Windows + PowerShell 5.1+；非 Windows 环境直接告知用户本工具不适用。
+- 仅支持 **Windows + PowerShell 7 (pwsh)**；非 Windows 环境直接告知用户本工具不适用。如果用户只有 Windows PowerShell 5.1，请先引导安装 PowerShell 7（`winget install Microsoft.PowerShell`）。
+- 所有脚本统一为 **UTF-8 无 BOM**；中英文在 Windows Terminal / PowerShell 7 中均可正确显示。
 
 ## 故障排查
 
 - 找不到 Python → 引导安装并勾选 PATH，或重启终端/电脑让 PATH 生效。
 - pip 安装慢/失败 → 换清华源：`python -m pip install -U ai-ipcheck -i https://pypi.tuna.tsinghua.edu.cn/simple`。
-- 中文乱码 → 已强制 UTF-8（bat 内 `chcp 65001`）；若仍乱码，确认终端代码页为 UTF-8。
+- 中文乱码 → 已统一 UTF-8 无 BOM（`.bat` 内 `chcp 65001`）；若仍乱码，请使用 Windows Terminal 或 PowerShell 7，并把字体改为 Consolas / Microsoft YaHei Mono。确保 `pwsh` 在 PATH 中。

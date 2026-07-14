@@ -16,7 +16,7 @@ The user asks whether their network/IP can use Claude, wants an "IP check" / "ip
 1. Locate `ClaudeIpCheck.ps1` and the two `.bat` launchers.
 2. Ensure Python 3.10+ on PATH (`python --version`). If missing, ask the user to install from https://www.python.org/downloads/ with "Add to PATH" ticked. Do not silently install Python.
 3. Run:
-   - One-shot: `powershell -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
+   - One-shot: `pwsh -NoProfile -ExecutionPolicy Bypass -File ClaudeIpCheck.ps1 -Once`
    - Monitor: append `-Monitor` (optionally `-OpenIpInfoCv` to open ipinfo.cv manually).
    - Network performance: append `-NetPerf` to also run speed test, DNS resolver, and service reachability checks.
 4. Interpret:
@@ -28,4 +28,5 @@ The user asks whether their network/IP can use Claude, wants an "IP check" / "ip
 - Does NOT change default browser, write registry, or require admin (only `-TimeSync` may need admin).
 - `ipinfo.cv/claude-ai-check` is client-side JS; only use as manual `-OpenIpInfoCv` cross-check, never an automated gate.
 - First run auto-installs `ai-ipcheck` via pip. On failure: `python -m pip install -U ai-ipcheck -i https://pypi.tuna.tsinghua.edu.cn/simple`.
-- Windows + PowerShell 5.1+ only.
+- Windows + PowerShell 7 (pwsh) only. If the user only has Windows PowerShell 5.1, guide them to install PowerShell 7 (`winget install Microsoft.PowerShell`).
+- All script files are saved as UTF-8 without BOM; Chinese and English display correctly in Windows Terminal / PowerShell 7.

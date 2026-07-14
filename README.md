@@ -21,7 +21,11 @@
 
 1. 安装 **Python 3.10 或以上**，安装时务必勾选 **`Add python.exe to PATH`**。
    下载：<https://www.python.org/downloads/>
-2. 把本仓库整个文件夹下载 / 克隆到任意位置（例如桌面 `Claude-IPCheck-Toolkit`）。
+2. 安装 **PowerShell 7**（`.bat` 启动器需要它）。推荐方式：
+   - Windows 商店搜索 "PowerShell" 安装；或
+   - 命令行：`winget install Microsoft.PowerShell`；或
+   - 官网 MSI：<https://github.com/PowerShell/PowerShell/releases>
+3. 把本仓库整个文件夹下载 / 克隆到任意位置（例如桌面 `Claude-IPCheck-Toolkit`）。
 
 > 首次运行会自动执行 `python -m pip install ai-ipcheck`，需联网。
 
@@ -30,7 +34,7 @@
 ## 二、傻瓜式使用
 
 ### 方式 A：双击运行（推荐）
-直接双击 **`Start-ClaudeIpCheck.bat`**，等待结果即可。
+直接双击 **`Start-ClaudeIpCheck.bat`**，等待结果即可。它会自动调用 PowerShell 7 (`pwsh`)。
 
 ### 方式 B：持续监测（适合挂 VPN 后自动检测）
 双击 **`Start-ClaudeIpCheck-Monitor.bat`**：脚本每 15 秒看一次出口 IP，
@@ -41,7 +45,10 @@
 ## 三、命令行参数
 
 在 `ClaudeIpCheck.ps1` 后追加参数即可，例如：
-`powershell -File ClaudeIpCheck.ps1 -Monitor -OpenIpInfoCv`
+`pwsh -File ClaudeIpCheck.ps1 -Monitor -OpenIpInfoCv`
+
+> 本工具要求 **PowerShell 7 (pwsh)**。`.bat` 启动器会自动调用 `pwsh`；若命令行手动运行，也请使用 `pwsh` 而非 `powershell`（后者是 Windows PowerShell 5.1）。
+> 所有脚本文件统一保存为 **UTF-8 无 BOM**，在 Windows Terminal 或 PowerShell 7 控制台中英文均可正确显示。
 
 | 参数 | 说明 | 默认 |
 | --- | --- | --- |
@@ -63,7 +70,7 @@
 
 > **网络性能检测（可选，参考 [MyIP](https://github.com/jason5ng32/MyIP) 思路）**：脚本内置网速、DNS 解析器、服务可达性三项检测，默认关闭。
 > 分别用 `-SpeedTest`（下载/上传带宽 + 延迟/抖动）、`-DnsCheck`（出口 DNS 是否泄漏/被接管）、`-Reach`（Claude/ChatGPT/Google 等 RTT）开启，或用 `-NetPerf` 一次性全开。
-> 示例：`powershell -File ClaudeIpCheck.ps1 -Once -NetPerf`（测速走 Cloudflare 公共服务，DNS 走免费 edns.ip-api.com，均无付费依赖）。
+> 示例：`pwsh -File ClaudeIpCheck.ps1 -Once -NetPerf`（测速走 Cloudflare 公共服务，DNS 走免费 edns.ip-api.com，均无付费依赖）。
 
 ## 四、结果怎么看
 
